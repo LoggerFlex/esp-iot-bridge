@@ -80,6 +80,11 @@ esp_err_t esp_bridge_wifi_set(wifi_mode_t mode,
         strlcpy((char*)wifi_cfg.ap.password, password, sizeof(wifi_cfg.ap.password));
         wifi_cfg.ap.max_connection = BRIDGE_SOFTAP_MAX_CONNECT_NUMBER;
         wifi_cfg.ap.authmode = strlen((char*)wifi_cfg.ap.password) < 8 ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+#if CONFIG_BRIDGE_SOFTAP_LR_MODE
+        ESP_ERROR_CHECK(esp_wifi_set_protocol(ESP_IF_WIFI_AP, WIFI_PROTOCOL_LR));
+#else
+        ESP_ERROR_CHECK(esp_wifi_set_protocol(ESP_IF_WIFI_AP, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N));
+#endif
         ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_cfg));
 
         ESP_LOGI(TAG, "softap ssid: %s password: %s", (char*)wifi_cfg.ap.ssid, (char*)wifi_cfg.ap.password);

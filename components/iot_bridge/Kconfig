@@ -57,6 +57,10 @@ menu "Bridge Configuration"
                     help
                         Add MAC to the end of SSID
 
+                config BRIDGE_SOFTAP_LR_MODE
+                    bool "SoftAP in Long Range Mode"
+                    default n 
+
                 config BRIDGE_SOFTAP_MAX_CONNECT_NUMBER
                     int "Maximum number of connections per node"
                     default 6 if !BRIDGE_CUSTOM_SOFTAP
@@ -325,6 +329,14 @@ menu "Bridge Configuration"
         config MODEM_RESET_GPIO
             int "Modem reset control gpio, set 0 if not use"
             default 13
+            
+        config MODEM_POWER_GPIO
+            int "Modem power control gpio, set 0 if not use"
+            default 4
+
+        config MODEM_ERROR_LED_GPIO
+            int "Modem error LED control gpio, set 0 if not use"
+            default 12
 
         config BRIDGE_MODEM_PPP_APN
             string "Set MODEM APN"

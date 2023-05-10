@@ -13,7 +13,7 @@
 #include "esp_modem_api.h"
 #include "esp_log.h"
 
-#define MODULE_BOOT_TIME_MS     5000
+#define MODULE_BOOT_TIME_MS     10000
 #if defined(CONFIG_BRIDGE_FLOW_CONTROL_NONE)
 #define BRIDGE_FLOW_CONTROL ESP_MODEM_FLOW_CONTROL_NONE
 #elif defined(CONFIG_BRIDGE_FLOW_CONTROL_SW)
@@ -89,6 +89,7 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "GOT ip event!!!");
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
+        gpio_set_level(CONFIG_MODEM_ERROR_LED_GPIO, 0);
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
@@ -105,15 +106,27 @@ esp_netif_t *esp_bridge_create_modem_netif(esp_netif_ip_info_t *custom_ip_info, 
         return netif;
     }
 
-    ESP_LOGW(TAG, "Force reset 4g board");
+    ESP_LOGW(TAG, "Power On 4g board");
     gpio_config_t io_config = {
-        .pin_bit_mask = BIT64(CONFIG_MODEM_RESET_GPIO),
+        .pin_bit_mask = BIT64(CONFIG_MODEM_POWER_GPIO) | BIT64(CONFIG_MODEM_ERROR_LED_GPIO),
         .mode = GPIO_MODE_OUTPUT
     };
     gpio_config(&io_config);
-    gpio_set_level(CONFIG_MODEM_RESET_GPIO, 0);
-    vTaskDelay(pdMS_TO_TICKS(500));
-    gpio_set_level(CONFIG_MODEM_RESET_GPIO, 1);
+    gpio_set_level(CONFIG_MODEM_ERROR_LED_GPIO, 1);
+    gpio_set_level(CONFIG_MODEM_POWER_GPIO, 0);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    gpio_set_level(CONFIG_MODEM_POWER_GPIO, 1);
+    // vTaskDelay(pdMS_TO_TICKS(10000));
+
+    // ESP_LOGW(TAG, "Force reset 4g board");
+    // gpio_config_t io_config2 = {
+    //     .pin_bit_mask = BIT64(CONFIG_MODEM_RESET_GPIO),
+    //     .mode = GPIO_MODE_OUTPUT
+    // };
+    // gpio_config(&io_config2);
+    // gpio_set_level(CONFIG_MODEM_RESET_GPIO, 0);
+    // vTaskDelay(pdMS_TO_TICKS(500));
+    // gpio_set_level(CONFIG_MODEM_RESET_GPIO, 1);
 
     vTaskDelay(pdMS_TO_TICKS(MODULE_BOOT_TIME_MS));
 
@@ -195,9 +208,28 @@ esp_netif_t *esp_bridge_create_modem_netif(esp_netif_ip_info_t *custom_ip_info, 
     }
 #endif
 
-    int rssi, ber;
-    esp_err_t err = esp_modem_get_signal_quality(dce, &rssi, &ber);
+    for (int i = 0; i < 10; i++) {
+        if (esp_modem_sync(dce) == ESP_OK)
+            break;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    esp_err_t err = esp_modem_sync(dce);
     if (err != ESP_OK) {
+        gpio_set_level(CONFIG_MODEM_ERROR_LED_GPIO, 0);
+        ESP_LOGE(TAG, "esp_modem_sync failed with %d %s", err, esp_err_to_name(err));
+        esp_modem_destroy(dce);
+        esp_netif_destroy(esp_netif);
+        vEventGroupDelete(event_group);
+        event_group = NULL;
+        return NULL;
+    }
+
+
+    int rssi, ber;
+    err = esp_modem_get_signal_quality(dce, &rssi, &ber);
+    if (err != ESP_OK) {
+        gpio_set_level(CONFIG_MODEM_ERROR_LED_GPIO, 0);
         ESP_LOGE(TAG, "esp_modem_get_signal_quality failed with %d %s", err, esp_err_to_name(err));
         esp_modem_destroy(dce);
         esp_netif_destroy(esp_netif);
@@ -207,8 +239,22 @@ esp_netif_t *esp_bridge_create_modem_netif(esp_netif_ip_info_t *custom_ip_info, 
     }
     ESP_LOGI(TAG, "Signal quality: rssi=%d, ber=%d", rssi, ber);
 
+    esp_modem_PdpContext_t pdp = {1, "IP", CONFIG_BRIDGE_MODEM_PPP_APN};
+
+    err = esp_modem_set_pdp_context(dce, &pdp);
+    if (err != ESP_OK) {
+        gpio_set_level(CONFIG_MODEM_ERROR_LED_GPIO, 0);
+        ESP_LOGE(TAG, "esp_modem_set_pdp_context failed with %d %s", err, esp_err_to_name(err));
+        esp_modem_destroy(dce);
+        esp_netif_destroy(esp_netif);
+        vEventGroupDelete(event_group);
+        event_group = NULL;
+        return NULL;
+    }
+
     err = esp_modem_set_mode(dce, ESP_MODEM_MODE_DATA);
     if (err != ESP_OK) {
+        gpio_set_level(CONFIG_MODEM_ERROR_LED_GPIO, 0);
         ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_DATA) failed with %d", err);
         esp_modem_destroy(dce);
         esp_netif_destroy(esp_netif);
