@@ -13,7 +13,7 @@
 #include "esp_modem_api.h"
 #include "esp_log.h"
 
-#define MODULE_BOOT_TIME_MS     10000
+#define MODULE_BOOT_TIME_MS     12000
 #if defined(CONFIG_BRIDGE_FLOW_CONTROL_NONE)
 #define BRIDGE_FLOW_CONTROL ESP_MODEM_FLOW_CONTROL_NONE
 #elif defined(CONFIG_BRIDGE_FLOW_CONTROL_SW)
@@ -90,6 +90,11 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
         gpio_set_level(CONFIG_MODEM_ERROR_LED_GPIO, 0);
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 0);
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_restart();
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
@@ -222,7 +227,11 @@ esp_netif_t *esp_bridge_create_modem_netif(esp_netif_ip_info_t *custom_ip_info, 
         esp_netif_destroy(esp_netif);
         vEventGroupDelete(event_group);
         event_group = NULL;
-        return NULL;
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 0);
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_restart();
     }
 
 
@@ -235,7 +244,11 @@ esp_netif_t *esp_bridge_create_modem_netif(esp_netif_ip_info_t *custom_ip_info, 
         esp_netif_destroy(esp_netif);
         vEventGroupDelete(event_group);
         event_group = NULL;
-        return NULL;
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 0);
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_restart();
     }
     ESP_LOGI(TAG, "Signal quality: rssi=%d, ber=%d", rssi, ber);
 
@@ -249,7 +262,11 @@ esp_netif_t *esp_bridge_create_modem_netif(esp_netif_ip_info_t *custom_ip_info, 
         esp_netif_destroy(esp_netif);
         vEventGroupDelete(event_group);
         event_group = NULL;
-        return NULL;
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 0);
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        gpio_set_level(CONFIG_MODEM_POWER_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_restart();
     }
 
     err = esp_modem_set_mode(dce, ESP_MODEM_MODE_DATA);
@@ -260,7 +277,7 @@ esp_netif_t *esp_bridge_create_modem_netif(esp_netif_ip_info_t *custom_ip_info, 
         esp_netif_destroy(esp_netif);
         vEventGroupDelete(event_group);
         event_group = NULL;
-        return NULL;
+        esp_restart();
     }
     /* Wait for IP address */
     ESP_LOGI(TAG, "Waiting for IP address");
